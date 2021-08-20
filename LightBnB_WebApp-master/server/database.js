@@ -79,10 +79,40 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  return pool.query(`SELECT * FROM properties LIMIT $1`,[limit])
-          .then((data) => 
-            data.rows
-          )  
+  
+  // 1
+  const queryParams = [];
+  // 2
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  WHERE 1=1
+  `;
+  // 3 IF A USER FILL OUT ALL THE SEARCH FIELD, IT WILL SEND THE QUERY ACCORDING
+  
+  if (options.city && options.minimum_price_per_night && options.maximum_price_per_night &&  options.minimum_rating) {
+    queryParams.push(`%${options.city}%` , `${options.minimum_price_per_night*99}` ,`${options.maximum_price_per_night*99}`, `${options.minimum_rating}`);
+    queryString += `AND city LIKE $1 AND cost_per_night > $2 AND cost_per_night < $3 AND rating > $4`;
+  }
+  
+  // 3 IF A USER FILL OUT ONLY CITY SEARCH FIELD, THEN ALL THE PROPERTIES IN THAT AREA WILL BE DISPLAYED
+
+  else if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `AND city LIKE $${queryParams.length}`;
+  }
+
+  // 4
+  queryParams.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  // 5 RETURN PROMISE
+  return pool.query(queryString, queryParams).then((res) => res.rows); 
 }
 exports.getAllProperties = getAllProperties;
 
